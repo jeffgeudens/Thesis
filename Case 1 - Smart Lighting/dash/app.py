@@ -1,0 +1,388 @@
+# -*- coding: utf-8 -*-
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+import pandas as pd
+import plotly.graph_objs as go
+from datetime import datetime
+from datetime import timedelta  
+import time
+import plotly
+from dash.dependencies import Input, Output
+import json
+import requests
+import mysql.connector
+from sqlalchemy import create_engine
+
+import utils.dash_reusable_components as drc
+
+# Help function to load the data of a selected battery
+def load_voltage(startDate, endDate, thingID, myToken):
+    ##### Specify time range #####
+    ##### Adjust this time range to specify which period you want to query - Mostly I use periods of one month #####
+    startTime = int(startDate.timestamp())*1000;  #print(startTime)
+    endTime = int(endDate.timestamp())*1000;  #print(endTime)
+
+    ##### Choose scope #####
+    scopeID = 'cot.smart_lighting'
+
+    ##### Specify query #####
+    metricID = 'Power.BatteryVoltHR'
+    myUrlQuery = 'https://idlab-iot.tengu.io/api/v1/scopes/{scope}/query/{metric}/events?from={start}&to={end}&things={thing}&orderByTime=asc'\
+        .format(scope = scopeID, metric = metricID, start=startTime, end=endTime, thing=thingID)
+
+    headers = {
+        'accept': 'application/json',
+        'authorization': 'Bearer {0}'.format(myToken),
+    }
+
+    ##### Execute query #####
+    response = requests.get(myUrlQuery, headers=headers)
+
+    try:
+        data = response.json(); 
+        column_names = data['columns']; 
+        values = data['values']
+        df = pd.DataFrame.from_dict(values)
+        df.columns = column_names
+        df["value"] = pd.to_numeric(df.value, errors='coerce')
+
+        ##### Clean up dataFrame #####
+        # Rename the column
+        df.rename(columns={'value':'Power.BatteryVoltHR'}, inplace=True)
+        # Set timestamp as index
+        df = df.set_index(pd.DatetimeIndex(pd.to_datetime(df.time, unit='ms')))
+        df.drop(['time'], axis=1,inplace=True)
+        message = 'All good'
+
+        return df, message
+
+    except ValueError:
+        df = None
+        errorMessage = "Decoding JSON has failed. Probably the token has expired"
+        return df, errorMessage
+
+def label_anomaly_moving_std (row, sigma):
+    if (row['Power.BatteryVoltHR'] > (row['moving_average'] + (sigma * row['moving_std']))) | (row['Power.BatteryVoltHR'] < (row['moving_average'] - (sigma * row['moving_std']))):
+        return 1
+    else:
+        return 0
+
+def label_anomaly_fixed_std (row, sigma, fixed_std):
+    if (row['Power.BatteryVoltHR'] > (row['moving_average'] + (sigma * fixed_std))) | (row['Power.BatteryVoltHR'] < (row['moving_average'] - (sigma * fixed_std))):
+        return 1
+    else:
+        return 0
+
+def low_pass_filtering(df, window_size, sigma, fixed_std):
+    # Calculate moving average
+    df['moving_average'] = df['Power.BatteryVoltHR'].rolling(window_size).mean()
+
+    # Calculate anomalies
+    df['residual'] = df['Power.BatteryVoltHR'] - df['moving_average']
+    df['moving_std'] = df['Power.BatteryVoltHR'].rolling(window_size).std()
+    df.dropna(inplace=True)
+    df['anomaly_flag_moving_std']=df.apply (lambda row: label_anomaly_moving_std(row, sigma), axis=1)
+    df['anomaly_flag_fixed_std']=df.apply (lambda row: label_anomaly_fixed_std(row, sigma, fixed_std), axis=1)
+
+    moving_anomalies = df[df['anomaly_flag_moving_std']==1]
+    fixed_anomalies = df[df['anomaly_flag_fixed_std']==1]
+
+    return df
+
+def initialize_database():
+    user = 'root'
+    passw = 'root'
+    host =  'localhost'  # either localhost or ip e.g. '172.17.0.2' or hostname address 
+    port = 3306 
+    database = 'smart_lighting'
+    engine = create_engine('mysql+mysqlconnector://' + user + ':' + passw + '@' + host + ':' + str(port) + '/' + database , echo=False)
+    return engine
+
+def load_voltage_from_database(thingID, startDate, endDate, engine):
+    table_name = 'battery_voltage'
+    start_date = startDate.strftime("%Y-%m-%d %H:%M:%S")
+    end_date = endDate.strftime("%Y-%m-%d %H:%M:%S")
+    query = ''' SELECT * 
+                FROM {} 
+                WHERE (sourceId = '{}') AND (time between '{}' and '{}')'''.format(table_name, thingID, start_date, end_date)
+    df = pd.read_sql(query, engine, index_col='time')
+    return df
+
+def find_last_datapoint(thingID):
+    table_name = 'battery_voltage'
+    query = ''' SELECT 
+                    time
+                FROM 
+                    {}
+                WHERE 
+                    sourceId = '{}'
+                ORDER BY time DESC
+                LIMIT 1'''.format(table_name, thingID)
+    result = pd.read_sql(query, engine)
+    return result['time'].iloc[0]
+
+# external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+# app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+
+external_css = [
+    # Normalize the CSS
+    "https://cdnjs.cloudflare.com/ajax/libs/normalize/7.0.0/normalize.min.css",
+    # Fonts
+    "https://fonts.googleapis.com/css?family=Open+Sans|Roboto",
+    "https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css",
+    # Base Stylesheet, replace this with your own base-styles.css using Rawgit
+    "https://rawgit.com/xhlulu/9a6e89f418ee40d02b637a429a876aa9/raw/f3ea10d53e33ece67eb681025cedc83870c9938d/base-styles.css",
+    # Custom Stylesheet, replace this with your own custom-styles.css using Rawgit
+    "https://cdn.rawgit.com/plotly/dash-svm/bb031580/custom-styles.css"
+]
+
+app = dash.Dash(__name__)
+
+for css in external_css:
+    app.css.append_css({"external_url": css})
+
+
+
+# Choose options
+sigma = 3
+
+# Set token
+myToken = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwUnhaVzd0N1d5aEczaEo3cUhoM3hQa3MzbkthTUE5Zy04SnozY2trQ3EwIn0.eyJqdGkiOiJkNGMwMTMwNi02MjBmLTRiNmEtODAwYy1lNmQzMWIyODQ0ODAiLCJleHAiOjE1NTQyMDkxNzgsIm5iZiI6MCwiaWF0IjoxNTU0MjA4NTc4LCJpc3MiOiJodHRwczovL2lkbGFiLWlvdC50ZW5ndS5pby9hdXRoL3JlYWxtcy9pZGxhYi1pb3QiLCJhdWQiOiJwb2xpY3ktZW5mb3JjZXIiLCJzdWIiOiI3NGVjNTQzYi03Yjc1LTQ1ZGItOWExNy0xMDY5OTlmYmU3OWEiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJzd2FnZ2VyLXVpIiwibm9uY2UiOiIwNzhjNDExZi00NzY1LTQwZmEtYTg3Zi1iOWJmMDg3MDI5MTYiLCJhdXRoX3RpbWUiOjE1NTQyMDg1NzgsInNlc3Npb25fc3RhdGUiOiI3YjI1ZTM4ZC0wZDcxLTRhODctOTU0Ny1kNjBlNGNmODBjODMiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vaWRsYWItaW90LnRlbmd1LmlvIiwiaHR0cDovL2xvY2FsaG9zdDo1NTU1Il0sInJlc291cmNlX2FjY2VzcyI6eyJwb2xpY3ktZW5mb3JjZXIiOnsicm9sZXMiOlsidXNlcjp2aWV3Il19fSwiYXV0aG9yaXphdGlvbiI6eyJwZXJtaXNzaW9ucyI6W3sicnNpZCI6IjQxOGFiMGYzLWE5NTQtNGEwMS04ZTdlLWFlZGQzN2VjZTcyMyIsInJzbmFtZSI6ImRhdGE6c2NvcGVkOnZpZXcifV19LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIGNvdC1zY29wZSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicmlnaHRzIjpbXSwibmFtZSI6IkplZmYgR2V1ZGVucyIsImdyb3VwcyI6WyIvYWxsLXVzZXJzIiwiL2NvdC90aGVzaXMiXSwicHJlZmVycmVkX3VzZXJuYW1lIjoiZ2V1ZGVucy5qZWZmQGdtYWlsLmNvbSIsImdpdmVuX25hbWUiOiJKZWZmIiwiZmFtaWx5X25hbWUiOiJHZXVkZW5zIiwiZW1haWwiOiJnZXVkZW5zLmplZmZAZ21haWwuY29tIiwicGljdHVyZSI6Imh0dHBzOi8vbGg1Lmdvb2dsZXVzZXJjb250ZW50LmNvbS8tRTYxVzBvTmFlOUkvQUFBQUFBQUFBQUkvQUFBQUFBQUFCd2MvUExDNy1mNTdnek0vcGhvdG8uanBnP3N6PTUwIn0.EnNqUlOIeGscs5iR6TVx3LCK2_G0zDjXO5mPFl-v4TFonYHrxN69gDbJ-hB3-mPj5DasU0K3vOsJ7EKVG-eEJHrPRF0eV-MIDHC0GMiflo4gSGzUPKWmC73fR_Ojqh_KgIs-sg3iiAUiqzBvDGXYBMSZ9-ytT7aZ1z9yxqDnvf5JEL_rNn3EXqu-oUMbvIa32BZTU3AdjfCKZcsW9x5egVP9FtxDZRGnyvilvz2TQLDp8qU87Ezg3Md9sgx06gNwaTTFL1kXQ1ZWjUJ8KRxD9ANjFSBnnnq5qC-vnlipDoFVnxou7VY7nFlmdFTdDwmEtkTylApcPpl0Paq-B_5Cnw'
+
+engine = initialize_database()
+
+# Generate app
+app.layout = html.Div(children=[
+    # .container class is fixed, .container.scalable is scalable
+    html.Div(className="banner", children=[
+        # Change App Name here
+        html.Div(className='container scalable', children=[
+            # Change App Name here
+            html.H2(html.A(
+                'Smart Lighting - Battery voltage anomaly detection',
+                href='https://github.com/jeffgeudens/Thesis/tree/master/Case%201%20-%20Smart%20Lighting',
+                style={
+                    'text-decoration': 'none',
+                    'color': 'inherit'
+                }
+            )),
+
+            html.A(
+                html.Img(src="https://s3-us-west-1.amazonaws.com/plotly-tutorials/logo/new-branding/dash-logo-by-plotly-stripe-inverted.png"),
+                href='https://plot.ly/products/dash/'
+            )
+        ]),
+    ]),
+
+    html.Div(id='body', className='container scalable', children=[
+        html.Div(className='row', children=[
+
+            html.Div(
+                className='nine columns',
+                children=[
+                    html.H2(children='Introduction'),
+
+                    html.Div(children='''
+                        This dashboard prototype shows three battery packs that are being used in the Smart Lighting project at Sint-Andriesplein in Antwerp.
+                        The raw data is shown together with the moving average. In case the moving average is more than three standard deviations
+                        different from the raw data, an anomaly is indicated.
+                    '''),
+
+                    html.H2(children='Instructions'),
+                    html.Div(children=[
+                        html.P("The panel on the right hand side is divided in two sections."),
+                        html.P("1) Data settings - Here you can choose the source of the data (which battery) and the time period"),
+                        html.P("2) Low pass filter settings - Here you can set the window size for the sliding window and the threshold for the standard deviation") ]   
+                    ),
+
+                    html.H3(id='battery-id'),
+                    html.Div(id='live-update-text-value-2'),
+                    html.Div(
+                        id='div-graphs',
+                        children=dcc.Graph(id='live-update-graph-2')
+                    ),
+                    dcc.Interval(
+                        id='interval-component',
+                        interval=60*1000, # in milliseconds
+                        n_intervals=0
+                    ),
+                    dcc.Interval(
+                        id='interval-component-2',
+                        interval=5*60*1000, # in milliseconds
+                        n_intervals=0
+                    )
+                ]),
+
+            html.Div(
+                className='three columns',
+                style={
+                    'min-width': '24.5%',
+                    'max-height': 'calc(100vh - 85px)',
+                    'overflow-y': 'auto',
+                    'overflow-x': 'hidden',
+                },
+                children=[
+                    drc.Card([
+                        drc.NamedDropdown(
+                            name='Select Battery Packs',
+                            id='dropdown-select-pack',
+                            options=[
+                                {'label': 'East', 'value': 'munisense.msup1h90115'},
+                                {'label': 'South', 'value': 'munisense.msup1i70124'},
+                                {'label': 'West', 'value': 'munisense.msup1g30034'}
+                            ],
+                            value='munisense.msup1h90115',
+                            clearable=False,
+                            searchable=False
+                        ),
+
+                        dcc.DatePickerRange(
+                            id='my-date-picker-range',
+                            min_date_allowed=datetime(2017,8,1),
+                            max_date_allowed=datetime.today(),
+                            initial_visible_month=datetime(datetime.today().year, datetime.today().month, 1),
+                            display_format='DD/MM/YYYY'
+                        ),
+                        html.Div(id='live-update-text')
+                    ]),
+
+                    drc.Card([
+                        drc.NamedSlider(
+                            name='Window size',
+                            id='slider-window-size',
+                            min=32,
+                            max=512,
+                            marks={i: i for i in [32, 64, 128, 256, 512]},
+                            value=256
+                        ),
+
+                        drc.NamedSlider(
+                            name='Standard deviation',
+                            id='slider-standard-deviation',
+                            min=0.1,
+                            max=0.5,
+                            marks={i / 10: str(i / 10) for i in
+                                                       range(0, 6, 1)},
+                            step=0.1,
+                            value=0.3,
+                        ),
+
+                        # html.Button(
+                        #     'Reset Threshold',
+                        #     id='button-zero-threshold'
+                        # ),
+                    ])
+                ]
+            ),
+        ]),
+    ])
+])
+
+@app.callback(Output('live-update-text', 'children'),
+              [Input('interval-component-2', 'n_intervals')])
+def update_metrics(n):
+    # Check for every thing when the last datapoint was added and do an API call to fill up the database
+    things = ['munisense.msup1i70124', 'munisense.msup1h90115', 'munisense.msup1h90103']
+    for thingID in things:
+        startDate = find_last_datapoint(thingID)
+        endDate = datetime.now()
+        df, message = load_voltage(startDate, endDate, thingID, myToken)
+        df.to_sql(name='battery_voltage', con=engine, if_exists = 'append', index=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return [
+        html.Span('Last update database: {}'.format(timestamp))
+    ]
+
+@app.callback(Output('battery-id', 'children'),
+              [Input('dropdown-select-pack', 'value')])
+def set_title(thingID):
+    return [
+        html.Span('Battery ID: {}'.format(thingID))
+    ]
+
+@app.callback([Output('live-update-graph-2', 'figure'),
+               Output('live-update-text-value-2', 'children')],
+              [Input('interval-component', 'n_intervals'),
+              Input('my-date-picker-range', 'start_date'),
+              Input('my-date-picker-range', 'end_date'),
+              Input('dropdown-select-pack', 'value'),
+              Input('slider-standard-deviation', 'value'),
+              Input('slider-window-size', 'value')])
+
+def update_graph_live(n, start_date, end_date, thingID, fixed_std, window_size):
+    # Set start date and end date
+    if end_date is not None:
+        endDate = datetime.strptime(end_date, '%Y-%m-%d')
+    else:
+        endDate = datetime.now()
+
+    if start_date is not None:
+        startDate = datetime.strptime(start_date, '%Y-%m-%d')
+    else:
+        startDate = endDate - timedelta(1/12*365)
+       
+
+    # df, errorMessage = load_voltage(startDate, endDate, thingID, myToken)
+    df = load_voltage_from_database(thingID, startDate, endDate, engine)
+    if df.empty: 
+        figure = {}
+        return [
+            figure,
+            html.Span('{}'.format("No data"), style={'color': 'red'})
+        ]
+
+    else:
+        df = low_pass_filtering(df, window_size, sigma, fixed_std)
+        moving_anomalies = df[df['anomaly_flag_moving_std']==1]
+        fixed_anomalies = df[df['anomaly_flag_fixed_std']==1]
+        last_timestamp = df.last_valid_index().strftime("%Y-%m-%d %H:%M")
+        text = 'Last received data point: {} (UTC)'.format(last_timestamp)
+        figure={
+            'data': [
+                go.Scatter(
+                    x=df.index,
+                    y=df['Power.BatteryVoltHR'],
+                    mode='markers',
+                    opacity=0.7,
+                    marker={
+                    'size': 6
+                    },
+                    name='Raw data'
+                    ),
+                go.Scatter(
+                    x=df.index,
+                    y=df['moving_average'],
+                    mode='lines',
+                    name='Moving average'
+                    ),
+                go.Scatter(
+                    x=fixed_anomalies.index,
+                    y=fixed_anomalies['Power.BatteryVoltHR'],
+                    mode='markers',
+                    marker={
+                    'size': 10,
+                    'symbol': 'x',
+                    'color': 'red'
+                    },
+                    name='anomalies'   
+                    )
+            ],
+            'layout': go.Layout(
+                xaxis={'title': 'Time'},
+                yaxis={'title': 'Battery voltage [V]',
+                'range': [0,17.5]},
+                margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
+                legend={'x': 0, 'y': 1},
+                hovermode='closest'
+                )
+        }
+        return [
+            figure,
+            html.Span('{}'.format(text))
+        ]
+        
+    
+if __name__ == '__main__':
+    app.run_server(debug=True)
