@@ -122,6 +122,19 @@ def find_last_datapoint(thingID):
     result = pd.read_sql(query, engine)
     return result['time'].iloc[0]
 
+def find_first_datapoint(thingID):
+    table_name = 'battery_voltage'
+    query = ''' SELECT 
+                    time
+                FROM 
+                    {}
+                WHERE 
+                    sourceId = '{}'
+                ORDER BY time ASC
+                LIMIT 1'''.format(table_name, thingID)
+    result = pd.read_sql(query, engine)
+    return result['time'].iloc[0]
+
 # external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 # app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
@@ -142,7 +155,7 @@ app = dash.Dash(__name__)
 for css in external_css:
     app.css.append_css({"external_url": css})
 
-
+app.scripts.config.serve_locally = True
 
 # Choose options
 sigma = 3
@@ -153,7 +166,9 @@ myToken = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwUnhaVzd0N1d5aEcza
 engine = initialize_database()
 
 # Generate app
-app.layout = html.Div(children=[
+app.layout = dcc.Loading(
+    type='cube',
+    children=[html.Div(children=[
     # .container class is fixed, .container.scalable is scalable
     html.Div(className="banner", children=[
         # Change App Name here
@@ -191,16 +206,15 @@ app.layout = html.Div(children=[
 
                     html.H2(children='Instructions'),
                     html.Div(children=[
-                        html.P("The panel on the right hand side is divided in two sections."),
-                        html.P("1) Data settings - Here you can choose the source of the data (which battery) and the time period"),
-                        html.P("2) Low pass filter settings - Here you can set the window size for the sliding window and the threshold for the standard deviation") ]   
+                        html.Div("The panel on the right hand side is divided in two sections."),
+                        html.Div("1) Data settings - Here you can choose the source of the data (which battery) and the time period"),
+                        html.Div("2) Low pass filter settings - Here you can set the window size for the sliding window and the threshold for the standard deviation") ]   
                     ),
 
                     html.H3(id='battery-id'),
-                    html.Div(id='live-update-text-value-2'),
                     html.Div(
                         id='div-graphs',
-                        children=dcc.Graph(id='live-update-graph-2')
+                        children=dcc.Loading(id='live-update-graph-1', type='graph', color='gold')
                     ),
                     dcc.Interval(
                         id='interval-component',
@@ -224,6 +238,7 @@ app.layout = html.Div(children=[
                 },
                 children=[
                     drc.Card([
+                        html.H4(children="Data settings"),
                         drc.NamedDropdown(
                             name='Select Battery Packs',
                             id='dropdown-select-pack',
@@ -242,12 +257,16 @@ app.layout = html.Div(children=[
                             min_date_allowed=datetime(2017,8,1),
                             max_date_allowed=datetime.today(),
                             initial_visible_month=datetime(datetime.today().year, datetime.today().month, 1),
-                            display_format='DD/MM/YYYY'
+                            display_format='DD/MM/YYYY',
+                            end_date=datetime.now().date(),
+                            start_date=(datetime.now() - timedelta(1/12*365)).date(),
+                            with_portal=True
                         ),
                         html.Div(id='live-update-text')
                     ]),
 
                     drc.Card([
+                        html.H4(children="Low pass filtering settings"),
                         drc.NamedSlider(
                             name='Window size',
                             id='slider-window-size',
@@ -272,12 +291,19 @@ app.layout = html.Div(children=[
                         #     'Reset Threshold',
                         #     id='button-zero-threshold'
                         # ),
-                    ])
+                    ]),
+
+                    drc.Card([
+                        html.Button(
+                            'Refresh graph',
+                            id='button-refresh-graph'
+                        )
+                    ]),
                 ]
             ),
         ]),
     ])
-])
+])])
 
 @app.callback(Output('live-update-text', 'children'),
               [Input('interval-component-2', 'n_intervals')])
@@ -302,9 +328,8 @@ def set_title(thingID):
         html.Span('Battery ID: {}'.format(thingID))
     ]
 
-@app.callback([Output('live-update-graph-2', 'figure'),
-               Output('live-update-text-value-2', 'children')],
-              [Input('interval-component', 'n_intervals'),
+@app.callback(Output('live-update-graph-1', 'children'),
+              [Input('button-refresh-graph', 'n_clicks'),
               Input('my-date-picker-range', 'start_date'),
               Input('my-date-picker-range', 'end_date'),
               Input('dropdown-select-pack', 'value'),
@@ -322,66 +347,74 @@ def update_graph_live(n, start_date, end_date, thingID, fixed_std, window_size):
         startDate = datetime.strptime(start_date, '%Y-%m-%d')
     else:
         startDate = endDate - timedelta(1/12*365)
-       
+    
+    if thingID == 'munisense.msup1g30034':
+        middleDate = datetime(2019,1,23,0,0)   
+        df1 = load_voltage_from_database(thingID, startDate, middleDate, engine)
+        df2 = load_voltage_from_database('munisense.msup1h90103', middleDate, endDate, engine)
+        df = df1.append(df2)
+    else:
+        df = load_voltage_from_database(thingID, startDate, endDate, engine)
 
-    # df, errorMessage = load_voltage(startDate, endDate, thingID, myToken)
-    df = load_voltage_from_database(thingID, startDate, endDate, engine)
     if df.empty: 
-        figure = {}
-        return [
-            figure,
+        return html.Div(id='loading-1', children=[
             html.Span('{}'.format("No data"), style={'color': 'red'})
-        ]
+        ])
 
     else:
         df = low_pass_filtering(df, window_size, sigma, fixed_std)
         moving_anomalies = df[df['anomaly_flag_moving_std']==1]
         fixed_anomalies = df[df['anomaly_flag_fixed_std']==1]
         last_timestamp = df.last_valid_index().strftime("%Y-%m-%d %H:%M")
-        text = 'Last received data point: {} (UTC)'.format(last_timestamp)
-        figure={
-            'data': [
-                go.Scatter(
-                    x=df.index,
-                    y=df['Power.BatteryVoltHR'],
-                    mode='markers',
-                    opacity=0.7,
-                    marker={
-                    'size': 6
-                    },
-                    name='Raw data'
-                    ),
-                go.Scatter(
-                    x=df.index,
-                    y=df['moving_average'],
-                    mode='lines',
-                    name='Moving average'
-                    ),
-                go.Scatter(
-                    x=fixed_anomalies.index,
-                    y=fixed_anomalies['Power.BatteryVoltHR'],
-                    mode='markers',
-                    marker={
-                    'size': 10,
-                    'symbol': 'x',
-                    'color': 'red'
-                    },
-                    name='anomalies'   
+
+        return html.Div(id='loading-1', children=[
+            html.Div('Last received data point: {} (UTC)'.format(last_timestamp)),
+            html.Div('Number of detected anomalies in this period: {}'.format(len(fixed_anomalies))),
+            # html.Span('Last detected anomaly: {}'.format(fixed_anomalies['time'].iloc[-1])),
+            dcc.Graph(
+                id='graph-2-tabs',
+                figure=go.Figure(
+                    data=[
+                        go.Scatter(
+                            x=df.index,
+                            y=df['Power.BatteryVoltHR'],
+                            mode='markers',
+                            opacity=0.7,
+                            marker={
+                            'size': 6
+                            },
+                            name='Raw data'
+                            ),
+                        go.Scatter(
+                            x=df.index,
+                            y=df['moving_average'],
+                            mode='lines',
+                            name='Moving average'
+                            ),
+                        go.Scatter(
+                            x=fixed_anomalies.index,
+                            y=fixed_anomalies['Power.BatteryVoltHR'],
+                            mode='markers',
+                            marker={
+                            'size': 10,
+                            'symbol': 'x',
+                            'color': 'red'
+                            },
+                            name='anomalies'   
+                            )
+                    ],
+                    layout=go.Layout(
+                        xaxis={'title': 'Time'},
+                        yaxis={'title': 'Battery voltage [V]',
+                        'range': [0,17.5]},
+                        margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
+                        legend={'x': 0, 'y': 1},
+                        hovermode='closest',
                     )
-            ],
-            'layout': go.Layout(
-                xaxis={'title': 'Time'},
-                yaxis={'title': 'Battery voltage [V]',
-                'range': [0,17.5]},
-                margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
-                legend={'x': 0, 'y': 1},
-                hovermode='closest'
-                )
-        }
-        return [
-            figure,
-            html.Span('{}'.format(text))
-        ]
+                ),
+            )
+        ])
+
         
     
 if __name__ == '__main__':
