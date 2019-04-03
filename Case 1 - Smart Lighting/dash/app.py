@@ -13,6 +13,7 @@ import json
 import requests
 import mysql.connector
 from sqlalchemy import create_engine
+import base64
 
 import utils.dash_reusable_components as drc
 
@@ -157,6 +158,11 @@ for css in external_css:
 
 app.scripts.config.serve_locally = True
 
+image_directory = 'C:/Users/Jeff/Dropbox/ICT-Elektronica/Thesis/scripts/Case 1 - Smart Lighting/dash/images/'
+
+image_filename = 'Check.png' # replace with your own image
+encoded_image = base64.b64encode(open(image_filename, 'rb').read())
+
 # Choose options
 sigma = 3
 
@@ -238,6 +244,10 @@ app.layout = dcc.Loading(
                 },
                 children=[
                     drc.Card([
+                    drc.Card([
+                        html.H4(children="Quick overview"),
+                        html.Img(src='data:image/png;base64,{}'.format(encoded_image))
+                    ]),
                         html.H4(children="Data settings"),
                         drc.NamedDropdown(
                             name='Select Battery Packs',
