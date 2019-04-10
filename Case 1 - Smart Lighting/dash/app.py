@@ -8,7 +8,7 @@ from datetime import datetime
 from datetime import timedelta  
 import time
 import plotly
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import json
 import requests
 import mysql.connector
@@ -42,21 +42,27 @@ def load_voltage(startDate, endDate, thingID, myToken):
 
     try:
         data = response.json(); 
-        column_names = data['columns']; 
-        values = data['values']
-        df = pd.DataFrame.from_dict(values)
-        df.columns = column_names
-        df["value"] = pd.to_numeric(df.value, errors='coerce')
+        # print(data)
+        if len(data) !=0:
+            column_names = data['columns']; 
+            values = data['values']
+            df = pd.DataFrame.from_dict(values)
+            df.columns = column_names
+            df["value"] = pd.to_numeric(df.value, errors='coerce')
 
-        ##### Clean up dataFrame #####
-        # Rename the column
-        df.rename(columns={'value':'Power.BatteryVoltHR'}, inplace=True)
-        # Set timestamp as index
-        df = df.set_index(pd.DatetimeIndex(pd.to_datetime(df.time, unit='ms')))
-        df.drop(['time'], axis=1,inplace=True)
-        message = 'All good'
+            ##### Clean up dataFrame #####
+            # Rename the column
+            df.rename(columns={'value':'Power.BatteryVoltHR'}, inplace=True)
+            # Set timestamp as index
+            df = df.set_index(pd.DatetimeIndex(pd.to_datetime(df.time, unit='ms')))
+            df.drop(['time'], axis=1,inplace=True)
+            message = 'All good'
 
-        return df, message
+            return df, message
+        else:
+            df = None
+            errorMessage = "No new data"
+            return df, errorMessage
 
     except ValueError:
         df = None
@@ -93,7 +99,7 @@ def low_pass_filtering(df, window_size, sigma, fixed_std):
 
 def initialize_database():
     user = 'root'
-    passw = 'root'
+    passw = ''
     host =  'localhost'  # either localhost or ip e.g. '172.17.0.2' or hostname address 
     port = 3306 
     database = 'smart_lighting'
@@ -158,16 +164,12 @@ for css in external_css:
 
 app.scripts.config.serve_locally = True
 
-image_directory = 'C:/Users/Jeff/Dropbox/ICT-Elektronica/Thesis/scripts/Case 1 - Smart Lighting/dash/images/'
-
-image_filename = 'Check.png' # replace with your own image
-encoded_image = base64.b64encode(open(image_filename, 'rb').read())
 
 # Choose options
 sigma = 3
 
 # Set token
-myToken = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwUnhaVzd0N1d5aEczaEo3cUhoM3hQa3MzbkthTUE5Zy04SnozY2trQ3EwIn0.eyJqdGkiOiJkNGMwMTMwNi02MjBmLTRiNmEtODAwYy1lNmQzMWIyODQ0ODAiLCJleHAiOjE1NTQyMDkxNzgsIm5iZiI6MCwiaWF0IjoxNTU0MjA4NTc4LCJpc3MiOiJodHRwczovL2lkbGFiLWlvdC50ZW5ndS5pby9hdXRoL3JlYWxtcy9pZGxhYi1pb3QiLCJhdWQiOiJwb2xpY3ktZW5mb3JjZXIiLCJzdWIiOiI3NGVjNTQzYi03Yjc1LTQ1ZGItOWExNy0xMDY5OTlmYmU3OWEiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJzd2FnZ2VyLXVpIiwibm9uY2UiOiIwNzhjNDExZi00NzY1LTQwZmEtYTg3Zi1iOWJmMDg3MDI5MTYiLCJhdXRoX3RpbWUiOjE1NTQyMDg1NzgsInNlc3Npb25fc3RhdGUiOiI3YjI1ZTM4ZC0wZDcxLTRhODctOTU0Ny1kNjBlNGNmODBjODMiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vaWRsYWItaW90LnRlbmd1LmlvIiwiaHR0cDovL2xvY2FsaG9zdDo1NTU1Il0sInJlc291cmNlX2FjY2VzcyI6eyJwb2xpY3ktZW5mb3JjZXIiOnsicm9sZXMiOlsidXNlcjp2aWV3Il19fSwiYXV0aG9yaXphdGlvbiI6eyJwZXJtaXNzaW9ucyI6W3sicnNpZCI6IjQxOGFiMGYzLWE5NTQtNGEwMS04ZTdlLWFlZGQzN2VjZTcyMyIsInJzbmFtZSI6ImRhdGE6c2NvcGVkOnZpZXcifV19LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIGNvdC1zY29wZSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicmlnaHRzIjpbXSwibmFtZSI6IkplZmYgR2V1ZGVucyIsImdyb3VwcyI6WyIvYWxsLXVzZXJzIiwiL2NvdC90aGVzaXMiXSwicHJlZmVycmVkX3VzZXJuYW1lIjoiZ2V1ZGVucy5qZWZmQGdtYWlsLmNvbSIsImdpdmVuX25hbWUiOiJKZWZmIiwiZmFtaWx5X25hbWUiOiJHZXVkZW5zIiwiZW1haWwiOiJnZXVkZW5zLmplZmZAZ21haWwuY29tIiwicGljdHVyZSI6Imh0dHBzOi8vbGg1Lmdvb2dsZXVzZXJjb250ZW50LmNvbS8tRTYxVzBvTmFlOUkvQUFBQUFBQUFBQUkvQUFBQUFBQUFCd2MvUExDNy1mNTdnek0vcGhvdG8uanBnP3N6PTUwIn0.EnNqUlOIeGscs5iR6TVx3LCK2_G0zDjXO5mPFl-v4TFonYHrxN69gDbJ-hB3-mPj5DasU0K3vOsJ7EKVG-eEJHrPRF0eV-MIDHC0GMiflo4gSGzUPKWmC73fR_Ojqh_KgIs-sg3iiAUiqzBvDGXYBMSZ9-ytT7aZ1z9yxqDnvf5JEL_rNn3EXqu-oUMbvIa32BZTU3AdjfCKZcsW9x5egVP9FtxDZRGnyvilvz2TQLDp8qU87Ezg3Md9sgx06gNwaTTFL1kXQ1ZWjUJ8KRxD9ANjFSBnnnq5qC-vnlipDoFVnxou7VY7nFlmdFTdDwmEtkTylApcPpl0Paq-B_5Cnw'
+myToken = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwUnhaVzd0N1d5aEczaEo3cUhoM3hQa3MzbkthTUE5Zy04SnozY2trQ3EwIn0.eyJqdGkiOiIwZmYyYjhlNS03NjNmLTRjNDEtYjMxMC1iYzBiMDlmMTA5NGYiLCJleHAiOjE1NTQ4OTc3MjMsIm5iZiI6MCwiaWF0IjoxNTU0ODk3MTIzLCJpc3MiOiJodHRwczovL2lkbGFiLWlvdC50ZW5ndS5pby9hdXRoL3JlYWxtcy9pZGxhYi1pb3QiLCJhdWQiOiJwb2xpY3ktZW5mb3JjZXIiLCJzdWIiOiI3NGVjNTQzYi03Yjc1LTQ1ZGItOWExNy0xMDY5OTlmYmU3OWEiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJzd2FnZ2VyLXVpIiwibm9uY2UiOiI4NGU5YmYyNS1jNWRjLTQwOWUtOGZhYS1lYWVmMDdiYWIxMmQiLCJhdXRoX3RpbWUiOjE1NTQ4OTcxMjIsInNlc3Npb25fc3RhdGUiOiI5ZDg1YjU3NC0yMDM2LTQ1NmItOGU3Zi1iZTk2NzkwNzUxN2UiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vaWRsYWItaW90LnRlbmd1LmlvIiwiaHR0cDovL2xvY2FsaG9zdDo1NTU1Il0sInJlc291cmNlX2FjY2VzcyI6eyJwb2xpY3ktZW5mb3JjZXIiOnsicm9sZXMiOlsidXNlcjp2aWV3Il19fSwiYXV0aG9yaXphdGlvbiI6eyJwZXJtaXNzaW9ucyI6W3sicnNpZCI6IjQxOGFiMGYzLWE5NTQtNGEwMS04ZTdlLWFlZGQzN2VjZTcyMyIsInJzbmFtZSI6ImRhdGE6c2NvcGVkOnZpZXcifV19LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIGNvdC1zY29wZSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicmlnaHRzIjpbXSwibmFtZSI6IkplZmYgR2V1ZGVucyIsImdyb3VwcyI6WyIvYWxsLXVzZXJzIiwiL2NvdC90aGVzaXMiXSwicHJlZmVycmVkX3VzZXJuYW1lIjoiZ2V1ZGVucy5qZWZmQGdtYWlsLmNvbSIsImdpdmVuX25hbWUiOiJKZWZmIiwiZmFtaWx5X25hbWUiOiJHZXVkZW5zIiwiZW1haWwiOiJnZXVkZW5zLmplZmZAZ21haWwuY29tIiwicGljdHVyZSI6Imh0dHBzOi8vbGg1Lmdvb2dsZXVzZXJjb250ZW50LmNvbS8tRTYxVzBvTmFlOUkvQUFBQUFBQUFBQUkvQUFBQUFBQUFCd2MvUExDNy1mNTdnek0vcGhvdG8uanBnP3N6PTUwIn0.IFTFB8fUJmEsRrD4P7IdDruOJoLzKWUO9uSiANM5sefCX-kaNvtUEkwImAySO98gwLRze-16-MczUiQHohi50EOln0XeIDBETLzS8gKvEfC5G4n0lRfPlZjtw8Jatz8QHPACkoEu2zzGKZv0SDkDRkb_9jQ1W4q-wG83aY9iGI5ojQ1y14JI8wqAO9CVrY__MW_AUHf8l3FlJPV0nTT6b7fA7g-pPFZANvjdBlt3G9C1aVRp0K7cK_VBi1FKikkHx3bRMMIoGYJVBBeeHLnxN09BSXxCxB-g-6sOPGMpLFoD7ezMB_XTs-1lmuyhC9nvAiSRpJ-dbPzjeHqBI2ba7w'
 
 engine = initialize_database()
 
@@ -210,14 +212,14 @@ app.layout = dcc.Loading(
                         different from the raw data, an anomaly is indicated.
                     '''),
 
-                    html.H2(children='Instructions'),
-                    html.Div(children=[
-                        html.Div("The panel on the right hand side is divided in two sections."),
-                        html.Div("1) Data settings - Here you can choose the source of the data (which battery) and the time period"),
-                        html.Div("2) Low pass filter settings - Here you can set the window size for the sliding window and the threshold for the standard deviation") ]   
-                    ),
+                    # html.H2(children='Instructions'),
+                    # html.Div(children=[
+                    #     html.Div("The panel on the right hand side is divided in two sections."),
+                    #     html.Div("1) Data settings - Here you can choose the source of the data (which battery) and the time period"),
+                    #     html.Div("2) Low pass filter settings - Here you can set the window size for the sliding window and the threshold for the standard deviation") ]   
+                    # ),
 
-                    html.H3(id='battery-id'),
+                    html.H3(children='Graph'),
                     html.Div(
                         id='div-graphs',
                         children=dcc.Loading(id='live-update-graph-1', type='graph', color='gold')
@@ -244,10 +246,16 @@ app.layout = dcc.Loading(
                 },
                 children=[
                     drc.Card([
-                    drc.Card([
-                        html.H4(children="Quick overview"),
-                        html.Img(src='data:image/png;base64,{}'.format(encoded_image))
+                        html.H4(children="Overview"),
+                        html.Img(
+                            id='overview-picture',
+                            style={'width': '50px',
+                                    'height': '50px',
+                                    'text-align': 'center'}),
+                        html.Div(
+                            id='overview-text')                              
                     ]),
+                    drc.Card([
                         html.H4(children="Data settings"),
                         drc.NamedDropdown(
                             name='Select Battery Packs',
@@ -331,25 +339,48 @@ def update_metrics(n):
         html.Span('Last update database: {}'.format(timestamp))
     ]
 
-@app.callback(Output('battery-id', 'children'),
-              [Input('dropdown-select-pack', 'value')])
-def set_title(thingID):
+@app.callback([Output('overview-picture', 'src'),
+               Output('overview-text', 'children')],
+               [Input('interval-component-2', 'n_intervals'),
+                Input('slider-standard-deviation', 'value'),
+                Input('slider-window-size', 'value')])
+def check_anomalies(n, fixed_std, window_size):
+    things = ['munisense.msup1i70124', 'munisense.msup1h90115', 'munisense.msup1h90103']
+    anomaly_text = ''
+    for thingID in things:
+        endDate = datetime.now()
+        startDate = endDate - timedelta(1/12*365)
+        df = load_voltage_from_database(thingID, startDate, endDate, engine)
+        df = low_pass_filtering(df, window_size, sigma, fixed_std)
+        last_week = df[(df['sourceId']==thingID) & (df.index<endDate) & (df.index>(endDate-timedelta(7)))]  
+        if sum(last_week['anomaly_flag_fixed_std'])!=0:
+            last_anomaly = last_week[last_week['anomaly_flag_fixed_std']==0].iloc[-1].name
+            anomaly_text = anomaly_text + str(thingID) + " - " + str(last_anomaly.strftime("%Y-%m-%d %H:%M")) + "\n"
+
+    if anomaly_text=='':
+        anomaly_text = "There were no anomalies over the last week"
+        url = 'https://raw.githubusercontent.com/jeffgeudens/Thesis/master/Case%201%20-%20Smart%20Lighting/dash/images/Check.png'
+    else:
+        url = 'https://raw.githubusercontent.com/jeffgeudens/Thesis/master/Case%201%20-%20Smart%20Lighting/dash/images/Cross.png'
+
     return [
-        html.Span('Battery ID: {}'.format(thingID))
+        url,
+        anomaly_text
     ]
 
 @app.callback(Output('live-update-graph-1', 'children'),
-              [Input('button-refresh-graph', 'n_clicks'),
-              Input('my-date-picker-range', 'start_date'),
-              Input('my-date-picker-range', 'end_date'),
-              Input('dropdown-select-pack', 'value'),
-              Input('slider-standard-deviation', 'value'),
-              Input('slider-window-size', 'value')])
+              [Input('button-refresh-graph', 'n_clicks')],
+              [State('my-date-picker-range', 'start_date'),
+              State('my-date-picker-range', 'end_date'),
+              State('dropdown-select-pack', 'value'),
+              State('slider-standard-deviation', 'value'),
+              State('slider-window-size', 'value')])
 
 def update_graph_live(n, start_date, end_date, thingID, fixed_std, window_size):
     # Set start date and end date
     if end_date is not None:
         endDate = datetime.strptime(end_date, '%Y-%m-%d')
+        endDate = endDate + timedelta(1)
     else:
         endDate = datetime.now()
 
@@ -373,6 +404,7 @@ def update_graph_live(n, start_date, end_date, thingID, fixed_std, window_size):
 
     else:
         df = low_pass_filtering(df, window_size, sigma, fixed_std)
+        # print(df.tail())
         moving_anomalies = df[df['anomaly_flag_moving_std']==1]
         fixed_anomalies = df[df['anomaly_flag_fixed_std']==1]
         last_timestamp = df.last_valid_index().strftime("%Y-%m-%d %H:%M")
@@ -385,7 +417,7 @@ def update_graph_live(n, start_date, end_date, thingID, fixed_std, window_size):
                 id='graph-2-tabs',
                 figure=go.Figure(
                     data=[
-                        go.Scatter(
+                        go.Scattergl(
                             x=df.index,
                             y=df['Power.BatteryVoltHR'],
                             mode='markers',
@@ -395,13 +427,13 @@ def update_graph_live(n, start_date, end_date, thingID, fixed_std, window_size):
                             },
                             name='Raw data'
                             ),
-                        go.Scatter(
+                        go.Scattergl(
                             x=df.index,
                             y=df['moving_average'],
                             mode='lines',
                             name='Moving average'
                             ),
-                        go.Scatter(
+                        go.Scattergl(
                             x=fixed_anomalies.index,
                             y=fixed_anomalies['Power.BatteryVoltHR'],
                             mode='markers',
@@ -418,7 +450,7 @@ def update_graph_live(n, start_date, end_date, thingID, fixed_std, window_size):
                         yaxis={'title': 'Battery voltage [V]',
                         'range': [0,17.5]},
                         margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
-                        legend={'x': 0, 'y': 1},
+                        legend={'x': 0, 'y': 0},
                         hovermode='closest',
                     )
                 ),
