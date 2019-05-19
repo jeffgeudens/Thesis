@@ -10,16 +10,16 @@ University: KU Leuven, Groep T, Electronics-IT:Option Intelligent Computing
 ## Contents
 This GitHub folder contains the code that was used to explore two use case.
   1. Case 1 - Smart Lighting
-    1. Data collection and merging
-    2. Data exploration
-    3. Low pass filtering
-    4. Battery voltage prediction using Regression
-    5. Battery voltage prediction using LSTM
+      1. Data collection and merging
+      2. Data exploration
+      3. Low pass filtering
+      4. Battery voltage prediction using Regression
+      5. Battery voltage prediction using LSTM
   2. Case 2 - Bel-Air
-    1. Data collection air quality sensors
-    2. Data exploration
-    3. Geospatial visualisation
-    4. Anomaly detection
+      1. Data collection air quality sensors
+      2. Data exploration
+      3. Geospatial visualisation
+      4. Anomaly detection
 
 ## Abstract
 According to the latest publication of the United Nations (2018), today 55\% of the world's population lives in urban areas. By 2050, it is expected that this share will increase to 68\% or 6.0 billion people. These figures show clearly that the world is urbanising at a fast rate. The significant increase in urban population will increase the demand for energy, mobility, water, waste management and other urban services. These trends are converging at a time where a new trend is emerging: digitalisation. Our world is getting digitalised at an ever increasing pace. All the everyday objects that we use are becoming connected and 'smarter', helping us to gather more data and optimise processes. It is the combination of challenges and opportunities in cities and these new technologies that led to the rise of 'smart cities'. 
