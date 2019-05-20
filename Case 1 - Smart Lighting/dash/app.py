@@ -99,7 +99,7 @@ def low_pass_filtering(df, window_size, sigma, fixed_std):
 
 def initialize_database():
     user = 'root'
-    passw = ''
+    passw = 'root'
     host =  'localhost'  # either localhost or ip e.g. '172.17.0.2' or hostname address 
     port = 3306 
     database = 'smart_lighting'
@@ -169,7 +169,7 @@ app.scripts.config.serve_locally = True
 sigma = 3
 
 # Set token
-myToken = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwUnhaVzd0N1d5aEczaEo3cUhoM3hQa3MzbkthTUE5Zy04SnozY2trQ3EwIn0.eyJqdGkiOiI0MzdiNzBhNi1kZTBiLTQ0YTUtYWI3Yi00YWZjNmFhYmFjZTAiLCJleHAiOjE1NTYyNzU5MDcsIm5iZiI6MCwiaWF0IjoxNTU2Mjc1MzA3LCJpc3MiOiJodHRwczovL2lkbGFiLWlvdC50ZW5ndS5pby9hdXRoL3JlYWxtcy9pZGxhYi1pb3QiLCJhdWQiOiJwb2xpY3ktZW5mb3JjZXIiLCJzdWIiOiI3NGVjNTQzYi03Yjc1LTQ1ZGItOWExNy0xMDY5OTlmYmU3OWEiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJzd2FnZ2VyLXVpIiwibm9uY2UiOiI2NzJiZWUwNi05MWFhLTQxODUtOGVjNi01MDllOWRlODI1MGMiLCJhdXRoX3RpbWUiOjE1NTYyNzUzMDYsInNlc3Npb25fc3RhdGUiOiI0OTI4N2U0OC0yMjcwLTRlNzUtYjUyYy1iMTIyMzVlOWE4ZTAiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vaWRsYWItaW90LnRlbmd1LmlvIiwiaHR0cDovL2xvY2FsaG9zdDo1NTU1Il0sInJlc291cmNlX2FjY2VzcyI6eyJwb2xpY3ktZW5mb3JjZXIiOnsicm9sZXMiOlsidXNlcjp2aWV3Il19fSwiYXV0aG9yaXphdGlvbiI6eyJwZXJtaXNzaW9ucyI6W3sicnNpZCI6IjQxOGFiMGYzLWE5NTQtNGEwMS04ZTdlLWFlZGQzN2VjZTcyMyIsInJzbmFtZSI6ImRhdGE6c2NvcGVkOnZpZXcifV19LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIGNvdC1zY29wZSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicmlnaHRzIjpbXSwibmFtZSI6IkplZmYgR2V1ZGVucyIsImdyb3VwcyI6WyIvYWxsLXVzZXJzIiwiL2NvdC90aGVzaXMiXSwicHJlZmVycmVkX3VzZXJuYW1lIjoiZ2V1ZGVucy5qZWZmQGdtYWlsLmNvbSIsImdpdmVuX25hbWUiOiJKZWZmIiwiZmFtaWx5X25hbWUiOiJHZXVkZW5zIiwiZW1haWwiOiJnZXVkZW5zLmplZmZAZ21haWwuY29tIiwicGljdHVyZSI6Imh0dHBzOi8vbGg1Lmdvb2dsZXVzZXJjb250ZW50LmNvbS8tRTYxVzBvTmFlOUkvQUFBQUFBQUFBQUkvQUFBQUFBQUFCd2MvUExDNy1mNTdnek0vcGhvdG8uanBnP3N6PTUwIn0.S61TEmRMqASuXiUep4Dn4hUi0y_jpbjM4doXOQ0TlCV3KEe7H1iDsG40fAOq0dxn-xPeNrCAqF1CwNLND7wBK8oW67L7xeycIXV6p-hyTBeN1rUzV6R-WGBjtqnKyFgOVCNN1cK37t9KNvcXANlgRKqdxh05MccfLqQMqZfnON4ILk4-yZXada44oX2BBCPeRNbd5k36YtA9gZUkDeypSqYcx26x8ifZl7WkLQOsUMK9ig1nmYtwP49YQCXKZfn7AuJIFhe49AANp7HaFTOnBSdxhHVOZqk_92rYABPqpz3OznD0NIuSMta9AgCBwXmoRYv8CaJFT3hvCqRhEL5F_g'
+myToken = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwUnhaVzd0N1d5aEczaEo3cUhoM3hQa3MzbkthTUE5Zy04SnozY2trQ3EwIn0.eyJqdGkiOiJmNGI4MDI5Ny02Mzc1LTQxYTgtODM2Ni03NmI0MGM3NjZlOTIiLCJleHAiOjE1NTgzNjA4MDksIm5iZiI6MCwiaWF0IjoxNTU4MzYwMjA5LCJpc3MiOiJodHRwczovL2lkbGFiLWlvdC50ZW5ndS5pby9hdXRoL3JlYWxtcy9pZGxhYi1pb3QiLCJhdWQiOiJwb2xpY3ktZW5mb3JjZXIiLCJzdWIiOiI3NGVjNTQzYi03Yjc1LTQ1ZGItOWExNy0xMDY5OTlmYmU3OWEiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJzd2FnZ2VyLXVpIiwibm9uY2UiOiI0MDZjY2ExZC01NTU4LTRiZTktYTk2Mi0yOGE3ODNkOTI4YWIiLCJhdXRoX3RpbWUiOjE1NTgzNjAwOTEsInNlc3Npb25fc3RhdGUiOiIwM2MyYTEzOC05YTc0LTQ3MzQtODczZC1mMzIyYTUwNWMyNjgiLCJhY3IiOiIwIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vaWRsYWItaW90LnRlbmd1LmlvIiwiaHR0cDovL2xvY2FsaG9zdDo1NTU1Il0sInJlc291cmNlX2FjY2VzcyI6eyJwb2xpY3ktZW5mb3JjZXIiOnsicm9sZXMiOlsidXNlcjp2aWV3Il19fSwiYXV0aG9yaXphdGlvbiI6eyJwZXJtaXNzaW9ucyI6W3sicnNpZCI6IjQxOGFiMGYzLWE5NTQtNGEwMS04ZTdlLWFlZGQzN2VjZTcyMyIsInJzbmFtZSI6ImRhdGE6c2NvcGVkOnZpZXcifV19LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIGNvdC1zY29wZSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicmlnaHRzIjpbXSwibmFtZSI6IkplZmYgR2V1ZGVucyIsImdyb3VwcyI6WyIvYWxsLXVzZXJzIiwiL2NvdC90aGVzaXMiXSwicHJlZmVycmVkX3VzZXJuYW1lIjoiZ2V1ZGVucy5qZWZmQGdtYWlsLmNvbSIsImdpdmVuX25hbWUiOiJKZWZmIiwiZmFtaWx5X25hbWUiOiJHZXVkZW5zIiwiZW1haWwiOiJnZXVkZW5zLmplZmZAZ21haWwuY29tIiwicGljdHVyZSI6Imh0dHBzOi8vbGg1Lmdvb2dsZXVzZXJjb250ZW50LmNvbS8tRTYxVzBvTmFlOUkvQUFBQUFBQUFBQUkvQUFBQUFBQUFCd2MvUExDNy1mNTdnek0vcGhvdG8uanBnP3N6PTUwIn0.dwOqxy0mOD3ewQDz5Ubk7skW7sGDmYXCWSl5YKUT0yuVMNWrgDojfMJyNZbv-mFqptTl639C8qiDK2Ep5DfQTjpvRQ3gBwzXfIhj9qwldRBJFWWJWyEN8czLwPz8v5iJyZb03SziI6LKmHLVuE1RslnUPTVXjSF66NS0fouyH74wMXfp06WnsSk9wYoewXQYesttLymj59BxAS_d00Pij4XVNsDe9GHn_ZMGqHawWgFqgSt1gI926KztCSHEuCk9z4zhJHX36cymIs0VPDq7Z2eFDeMNL00g0P5_khq1MuJOSJ1xPtQQz_gntFHBfrBRTRAjdElPQhHJf7jEL_NFeQ'
 
 engine = initialize_database()
 
@@ -289,8 +289,8 @@ app.layout = dcc.Loading(
                             name='Window size',
                             id='slider-window-size',
                             min=32,
-                            max=512,
-                            marks={i: i for i in [32, 64, 128, 256, 512]},
+                            max=1024,
+                            marks={i: i for i in [32, 64, 128, 256, 512, 1024]},
                             value=256
                         ),
 
@@ -342,9 +342,10 @@ def update_metrics(n):
 @app.callback([Output('overview-picture', 'src'),
                Output('overview-text', 'children')],
                [Input('interval-component-2', 'n_intervals'),
-                Input('slider-standard-deviation', 'value'),
-                Input('slider-window-size', 'value')])
-def check_anomalies(n, fixed_std, window_size):
+                Input('button-refresh-graph', 'n_clicks')],
+               [State('slider-standard-deviation', 'value'),
+                State('slider-window-size', 'value')])
+def check_anomalies(n_intervals,n_clicks, fixed_std, window_size):
     things = ['munisense.msup1i70124', 'munisense.msup1h90115', 'munisense.msup1h90103']
     anomaly_text = ''
     for thingID in things:
